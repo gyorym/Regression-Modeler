@@ -1,0 +1,123 @@
+Regression Modeler Presentation
+========================================================
+author: Matt Gyory
+date: June 8, 2016
+autosize: true
+
+The Regression Modeler Shiny App
+========================================================
+
+The Regression Modeler Shiny Appy provides a quick and easy way to illustrate a single or multivariate regression. It uses the GaltonFamilies data frame from the HistData package to provide users with the following features:
+
+- Checkbox list of regression variables
+- Scatterplot output of predicted vs actual values
+- Predictions based on user's personal data
+
+This ShinyAppy can serve as an excellent tool to demonstrate two key data scientist skills: regressions and developing apps.
+
+Regression Modeler UI
+========================================================
+left:70%
+The UI contains to separate sections for the user to 1. Select regressors and 2. Input data and compare to the predicted values.Two action buttons are used to allow for reactive input. 
+```
+shinyUI(fluidPage(
+  
+  # Application title
+  titlePanel("Galton Height Regression Builder"),
+  
+  # Check box for selecting variables 
+  headerPanel("Build your regression using Galton Families data"),
+  sidebarLayout(
+    sidebarPanel(
+      h1('Select the variables for the regression'),
+      checkboxGroupInput("id1","Select regressors: ",
+                         c("Height of Father"="father",
+                           "Height of Mother"="mother",
+                           "Mid-Parent Height"="midparentHeight",
+                           "Gender of Child"="gender")),
+      actionButton("build","Build!"),
+      
+      #Add a box so the user can enter parents height, gender and personal height
+      h1('Add your own data and predict values'),
+      numericInput('fatherheight',"Father's height, in",68),
+      numericInput('motherheight',"Mother's height, in",64),
+      numericInput('userheight',"Your height, in",66),
+      selectInput('gender','gender',c('male','female')),
+      actionButton("predict","Predict!")
+      
+    ),
+    
+   mainPanel(
+     
+    )
+  )
+))
+
+```
+***
+![markup](Regression_Modeler_UI_Selection.png)
+
+Regression Modeler Server Function
+========================================================
+left: 25%
+The server function goes through several steps to ensure a quick and accurate response to the inputs selected. 
+
+- The GaltonFamilies data is preloaded and excludes variables that do not make sense in a regression
+- Default values for reactive variables are set to ensure the output section of the UI functions
+- Based on the input from the checkboxes, a regression and fitted values are created
+- A scatterplot of predicted vs actual values is created to showcase how well the regression predicts heights
+- Based on the input from the user's personal data, a data frame of values to plug into the regression outputs is created
+- Entered and predicted values are output as is the percentage difference between actual and predicted
+
+***
+
+```
+require(HistData)
+appdata<-subset(GaltonFamilies,select=c(father,mother,midparentHeight,gender,childHeight))
+
+shinyServer(function(input, output) {
+  #Set defaults if nothing is selected
+  model<-reactiveValues()
+  model$heightmodel<-lm(childHeight~1,data=appdata)
+  model$fitted<-lm(childHeight~1,data=appdata)$fitted.values
+  model$regressors<-c("1")
+  
+  #Create model and fitted values for plot
+  observeEvent(input$build, {
+    regressors<-paste(c(input$id1,"1"),sep="+",collapse="+")
+    model$regressors<-paste(c(input$id1,"1"),sep="+",collapse="+")
+    model$heightmodel<-lm(as.formula(paste("childHeight","~",regressors)),data=appdata)
+    model$fitted<-lm(as.formula(paste("childHeight","~",regressors)),data=appdata)$fitted.values
+    })
+  
+  #Create output of plot with Observed vs Predicted
+  output$distPlot<-renderPlot({
+    plot(x=appdata$childHeight,xlab="Observation",ylab="Child Height, in", main="Actual and Predicted Values for Regression", col=3)
+      points(model$fitted,col=5)
+      legend(x="bottomright",legend=c("Actual","Predicted"),col=c(3,5), pch=c(1))
+  })
+  
+  #create comparison of predicted to actual values.
+  observeEvent(input$predict, {
+    output$inputValue<-renderPrint({input$userheight})
+    #Create a data frame with the values entered by the user
+    newvals<-data.frame(father=input$fatherheight,
+                        mother=input$motherheight,
+                        gender=input$gender,
+                        midparentHeight=(input$fatherheight+1.08*input$motherheight)/2,
+                        childHeight=input$userheight)
+    #Predicted value
+    output$predicted<-renderPrint({
+      predict(lm(as.formula(paste("childHeight","~",model$regressors)),data=appdata),newvals)
+    })
+    #Variance from prediction %
+    output$predictvar<-renderPrint({
+      paste(round((((predict(lm(as.formula(paste("childHeight","~",model$regressors)),data=appdata),newvals))-input$userheight)/input$userheight)*100,digits=2),"%",sep="")
+})})})
+```
+
+Regression Modeler Output
+========================================================
+Once a user selects regressors or enters height information and clicks Build! or Predict! the app swings into motion. Below is a screen shot highlighting the predictors selected, data entered and the resultant scatterplot and predicted values presented. 
+
+![markup](Regression_Modeler_UI_Ouput.png)
